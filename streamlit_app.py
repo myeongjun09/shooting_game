@@ -53,11 +53,17 @@ def init_game_state():
     st.session_state.game_running = True
     st.session_state.last_game_update_time = time.time() # 턴 간 시간 계산용
 
-# 세션 상태가 초기화되지 않았다면 초기화 함수 호출
+# 세션 상태가 초기화되지 않았거나 타입이 올바르지 않으면 초기화 함수 호출
 for key in STATE_KEYS:
     if key not in st.session_state:
         init_game_state()
         break
+# 추가적인 타입 안정성 보장
+if not isinstance(st.session_state.zombies, list):
+    st.session_state.zombies = []
+if not isinstance(st.session_state.items, list):
+    st.session_state.items = []
+
 
 # =========================
 # 메시지 및 UI 업데이트 유틸리티
@@ -75,7 +81,9 @@ def update_ui():
     col3.metric("골드", st.session_state.player_gold)
     col4.metric("킬 수", st.session_state.player_kills)
 
-    st.progress(st.session_state.player_hp / st.session_state.player_max_hp, text="HP")
+    # HP 프로그레스 바는 항상 0과 1 사이의 값을 가지도록 보장
+    progress_hp_value = max(0.0, min(1.0, st.session_state.player_hp / st.session_state.player_max_hp))
+    st.progress(progress_hp_value, text="HP")
 
     st.subheader(f"현재 웨이브: {st.session_state.wave_count} / {MAX_WAVES}")
     st.write(f"남은 좀비: {len(st.session_state.zombies)}")
@@ -106,7 +114,7 @@ def shoot_action():
     # 가장 가까운 좀비 찾기
     if st.session_state.zombies:
         closest_zombie_index = 0
-        min_distance = st.session_state.zombies[0]['distance']
+        min_distance = float('inf') # 무한대로 초기화
         for i, zombie in enumerate(st.session_state.zombies):
             if zombie['distance'] < min_distance:
                 min_distance = zombie['distance']
@@ -167,12 +175,18 @@ def collect_item_action(item_id):
         return
 
     item_found = None
-    for i, item in enumerate(st.session_state.items):
-        if item['id'] == item_id:
-            item_found = item
-            st.session_state.items.pop(i) # 아이템 제거
-            break
-    
+    # items 리스트가 유효한지 다시 확인
+    if isinstance(st.session_state.items, list):
+        for i, item in enumerate(st.session_state.items):
+            if item['id'] == item_id:
+                item_found = item
+                st.session_state.items.pop(i) # 아이템 제거
+                break
+    else:
+        # 만약 items가 리스트가 아니면 초기화하고 오류 메시지 출력
+        st.session_state.items = []
+        show_message("게임 오류: 아이템 목록이 손상되었습니다. 리셋됩니다.")
+        
     if item_found:
         if item_found['type'] == 'health':
             heal_amount = ITEM_HEAL_AMOUNT
@@ -213,7 +227,6 @@ def next_turn_action():
             # 재장전 중에는 턴 진행이 안 되는 대신 다른 액션도 불가 (현재는 UI 버튼 활성화/비활성화로 제어)
 
     # 좀비 생성
-    st.session_state.last_game_update_time += ZOMBIE_SPAWN_INTERVAL_TURNS * 1000 # 가상의 시간 진행
     if st.session_state.wave_count < MAX_WAVES:
         if len(st.session_state.zombies) == 0: # 현재 웨이브 좀비가 없으면 다음 웨이브 시작
             st.session_state.wave_count += 1
@@ -227,18 +240,32 @@ def next_turn_action():
             spawn_zombie()
 
     # 좀비 이동 및 공격
-    for zombie in st.session_state.zombies:
-        zombie['distance'] = max(0, zombie['distance'] - ZOMBIE_SPEED_PER_TURN) # 플레이어에게 가까워짐
+    # zombies 리스트가 유효한지 다시 확인
+    if isinstance(st.session_state.zombies, list):
+        for zombie in st.session_state.zombies:
+            zombie['distance'] = max(0, zombie['distance'] - ZOMBIE_SPEED_PER_TURN) # 플레이어에게 가까워짐
 
-        if zombie['distance'] <= 0:
-            damage_taken = zombie['atk']
-            st.session_state.player_hp -= damage_taken
-            show_message(f"💢 좀비에게 {damage_taken} 피해를 입었습니다! (HP: {st.session_state.player_hp})")
-            zombie['distance'] = 1 # 더 이상 다가오지 못하게 잠시 멈춤
+            if zombie['distance'] <= 0:
+                damage_taken = zombie['atk']
+                st.session_state.player_hp -= damage_taken
+                show_message(f"💢 좀비에게 {damage_taken} 피해를 입었습니다! (HP: {st.session_state.player_hp})")
+                zombie['distance'] = 1 # 더 이상 다가오지 못하게 잠시 멈춤
+    else:
+        # zombies가 리스트가 아니면 초기화하고 오류 메시지 출력
+        st.session_state.zombies = []
+        show_message("게임 오류: 좀비 목록이 손상되었습니다. 리셋됩니다.")
+
 
     # 아이템 스폰
-    if random.random() < ITEMS_SPAWN_CHANCE and len(st.session_state.items) < 3: # 최대 3개까지 스폰
-        spawn_item()
+    # items 리스트가 유효한지 다시 확인
+    if isinstance(st.session_state.items, list):
+        if random.random() < ITEMS_SPAWN_CHANCE and len(st.session_state.items) < 3: # 최대 3개까지 스폰
+            spawn_item()
+    else:
+        # items가 리스트가 아니면 초기화하고 오류 메시지 출력
+        st.session_state.items = []
+        show_message("게임 오류: 아이템 목록이 손상되었습니다. 리셋됩니다.")
+
 
     # 게임 종료/승리 조건 체크
     if st.session_state.player_hp <= 0:
@@ -356,4 +383,3 @@ else: # 게임 종료 (오버 또는 클리어)
     if st.button("새 게임 시작", key="restart_game_final"):
         init_game_state()
         st.rerun()
-
