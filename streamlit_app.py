@@ -1,768 +1,359 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>좀비 슈터 RPG</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Inter 폰트 로드 */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #1a202c; /* Tailwind gray-900 */
-            color: #e2e8f0; /* Tailwind gray-200 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            overflow: hidden; /* 스크롤바 방지 */
-        }
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #2d3748; /* Tailwind gray-800 */
-            border-radius: 1rem; /* rounded-xl */
-            padding: 1.5rem; /* p-6 */
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.25); /* shadow-xl */
-            width: 90vw; /* 가변 너비 */
-            max-width: 1000px; /* 최대 너비 제한 */
-        }
-        canvas {
-            background-color: #1a202c; /* 게임 배경 */
-            border: 2px solid #4a5568; /* Tailwind gray-600 */
-            border-radius: 0.5rem; /* rounded-md */
-            display: block;
-            touch-action: none; /* 터치 이벤트 기본 동작 방지 (캔버스 드래그 등) */
-        }
-        #ui-panel {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            margin-top: 1rem; /* mt-4 */
-            gap: 1rem;
-            flex-wrap: wrap; /* 작은 화면에서 요소들이 줄바꿈되도록 */
-        }
-        .ui-element {
-            background-color: #4a5568; /* Tailwind gray-600 */
-            padding: 0.75rem 1rem; /* py-3 px-4 */
-            border-radius: 0.5rem; /* rounded-md */
-            text-align: center;
-            font-weight: bold;
-            flex: 1; /* 가변 너비 */
-            min-width: 120px; /* 최소 너비 설정 */
-        }
-        .ui-element span {
-            display: block;
-            font-size: 0.875rem; /* text-sm */
-            color: #a0aec0; /* Tailwind gray-400 */
-        }
-        #message-box {
-            background-color: #2c5282; /* Tailwind blue-700 */
-            color: #fff;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-top: 1rem;
-            width: 100%;
-            text-align: center;
-            font-weight: bold;
-            display: none; /* 초기에는 숨김 */
-            position: absolute; /* 캔버스 위에 오도록 */
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 100;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
-        }
-        #message-box.active {
-            display: block;
-            opacity: 1;
-        }
-        .game-button {
-            background-color: #38a169; /* Tailwind green-600 */
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            margin-top: 1rem;
-        }
-        .game-button:hover {
-            background-color: #2f855a; /* Tailwind green-700 */
-        }
-        .game-button:disabled {
-            background-color: #a0aec0; /* Tailwind gray-400 */
-            cursor: not-allowed;
-        }
-        #game-over-screen, #game-win-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-size: 2rem;
-            text-align: center;
-            z-index: 200;
-            opacity: 0;
-            pointer-events: none; /* 초기에는 클릭 불가능 */
-            transition: opacity 0.5s ease-in-out;
-            border-radius: 1rem; /* rounded-xl */
-        }
-        #game-over-screen.active, #game-win-screen.active {
-            opacity: 1;
-            pointer-events: auto; /* 활성화 시 클릭 가능 */
-        }
-        #game-over-screen h2, #game-win-screen h2 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        #game-win-screen h2 {
-            color: #48bb78; /* Tailwind green-500 */
-        }
-    </style>
-</head>
-<body>
-    <div id="game-container" class="relative">
-        <canvas id="gameCanvas"></canvas>
-        <div id="ui-panel">
-            <div class="ui-element">HP: <span id="playerHp">100</span></div>
-            <div class="ui-element">탄약: <span id="playerAmmo">6 / 30</span></div>
-            <div class="ui-element">골드: <span id="playerGold">0</span></div>
-            <div class="ui-element">킬 수: <span id="playerKills">0</span></div>
-        </div>
-        <button id="reloadButton" class="game-button">재장전 (R)</button>
+import streamlit as st
+import random
+import time
 
-        <div id="message-box" class="rounded-lg"></div>
+# =========================
+# 초기 설정 및 상수
+# =========================
+# 게임 상태를 저장할 세션 스테이트 키
+STATE_KEYS = [
+    "player_hp", "player_max_hp", "player_current_mag_ammo",
+    "player_magazine_size", "player_total_ammo", "player_gold",
+    "player_kills", "player_is_reloading", "player_reload_end_time",
+    "zombies", "items", "wave_count", "zombies_to_spawn_this_wave",
+    "game_message", "game_running", "last_game_update_time"
+]
 
-        <div id="game-over-screen" class="rounded-xl">
-            <h2>게임 오버!</h2>
-            <p>모든 좀비로부터 살아남지 못했습니다.</p>
-            <button id="restartGameBtn" class="game-button">다시 시작</button>
-        </div>
+# 게임 설정값
+PLAYER_BASE_ATK = 20
+ZOMBIE_INITIAL_HP = 50
+ZOMBIE_INITIAL_ATK = 10
+ZOMBIE_INITIAL_GOLD = 10
+ZOMBIE_SPEED_PER_TURN = 1 # 한 턴에 좀비가 플레이어에게 가까워지는 정도 (가상 거리)
+ZOMBIE_SPAWN_INTERVAL_TURNS = 2 # 좀비가 스폰되는 턴 간격
+ITEMS_SPAWN_CHANCE = 0.3 # 턴 진행 시 아이템 스폰 확률
+ITEM_HEAL_AMOUNT = 30
+ITEM_AMMO_AMOUNT = 20
+MAX_WAVES = 10 # 최종 웨이브 수 (이후 게임 클리어 목표)
+
+# =========================
+# 게임 초기화 함수
+# =========================
+def init_game_state():
+    """
+    게임의 모든 세션 상태를 초기화합니다.
+    """
+    st.session_state.player_hp = 100
+    st.session_state.player_max_hp = 100
+    st.session_state.player_current_mag_ammo = 10
+    st.session_state.player_magazine_size = 10
+    st.session_state.player_total_ammo = 30
+    st.session_state.player_gold = 0
+    st.session_state.player_kills = 0
+    st.session_state.player_is_reloading = False
+    st.session_state.player_reload_end_time = 0
+
+    st.session_state.zombies = [] # [{hp: int, atk: int, gold: int, distance: float, name: str, id: int}]
+    st.session_state.items = [] # [{type: str, distance: float, id: int}]
+
+    st.session_state.wave_count = 0
+    st.session_state.zombies_to_spawn_this_wave = 3 # 첫 웨이브 좀비 수
+    
+    st.session_state.game_message = "새로운 게임을 시작합니다!"
+    st.session_state.game_running = True
+    st.session_state.last_game_update_time = time.time() # 턴 간 시간 계산용
+
+# 세션 상태가 초기화되지 않았다면 초기화 함수 호출
+for key in STATE_KEYS:
+    if key not in st.session_state:
+        init_game_state()
+        break
+
+# =========================
+# 메시지 및 UI 업데이트 유틸리티
+# =========================
+def show_message(msg):
+    """게임 메시지를 업데이트합니다."""
+    st.session_state.game_message = msg
+
+def update_ui():
+    """게임 UI의 주요 정보를 업데이트하여 표시합니다."""
+    st.subheader("플레이어 상태")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("HP", f"{st.session_state.player_hp}/{st.session_state.player_max_hp}")
+    col2.metric("탄약", f"{st.session_state.player_current_mag_ammo}/{st.session_state.player_total_ammo}")
+    col3.metric("골드", st.session_state.player_gold)
+    col4.metric("킬 수", st.session_state.player_kills)
+
+    st.progress(st.session_state.player_hp / st.session_state.player_max_hp, text="HP")
+
+    st.subheader(f"현재 웨이브: {st.session_state.wave_count} / {MAX_WAVES}")
+    st.write(f"남은 좀비: {len(st.session_state.zombies)}")
+
+    st.info(st.session_state.game_message)
+
+# =========================
+# 게임 액션 함수
+# =========================
+def shoot_action():
+    """
+    총을 발사하는 액션을 처리합니다.
+    가장 가까운 좀비를 자동으로 조준합니다.
+    """
+    if not st.session_state.game_running:
+        return
+
+    player_atk = PLAYER_BASE_ATK # 현재는 고정 공격력
+
+    if st.session_state.player_is_reloading:
+        show_message("재장전 중입니다...")
+        return
+    
+    if st.session_state.player_current_mag_ammo <= 0:
+        show_message("탄약이 없습니다. 재장전하세요 (R 키 또는 버튼)!")
+        return
+
+    # 가장 가까운 좀비 찾기
+    if st.session_state.zombies:
+        closest_zombie_index = 0
+        min_distance = st.session_state.zombies[0]['distance']
+        for i, zombie in enumerate(st.session_state.zombies):
+            if zombie['distance'] < min_distance:
+                min_distance = zombie['distance']
+                closest_zombie_index = i
         
-        <div id="game-win-screen" class="rounded-xl">
-            <h2>게임 클리어!</h2>
-            <p>모든 좀비를 물리쳤습니다!</p>
-            <button id="restartWinBtn" class="game-button">다시 시작</button>
-        </div>
-    </div>
+        target_zombie = st.session_state.zombies[closest_zombie_index]
 
-    <script>
-        // 캔버스 및 컨텍스트 설정
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        # 총알 소모
+        st.session_state.player_current_mag_ammo -= 1
+        
+        # 좀비에게 피해 입히기
+        damage_dealt = player_atk + random.randint(-5, 5) # 무작위성 추가
+        target_zombie['hp'] -= damage_dealt
+        show_message(f"🔫 좀비에게 {damage_dealt} 피해를 입혔습니다! ({target_zombie['name']} HP: {max(0, target_zombie['hp'])})")
 
-        // UI 요소
-        const playerHpEl = document.getElementById('playerHp');
-        const playerAmmoEl = document.getElementById('playerAmmo');
-        const playerGoldEl = document.getElementById('playerGold');
-        const playerKillsEl = document.getElementById('playerKills');
-        const reloadButton = document.getElementById('reloadButton');
-        const messageBox = document.getElementById('message-box');
-        const gameOverScreen = document.getElementById('game-over-screen');
-        const gameWinScreen = document.getElementById('game-win-screen');
-        const restartGameBtn = document.getElementById('restartGameBtn');
-        const restartWinBtn = document.getElementById('restartWinBtn');
+        # 좀비 사망 처리
+        if target_zombie['hp'] <= 0:
+            st.session_state.player_gold += target_zombie['gold']
+            st.session_state.player_kills += 1
+            st.session_state.zombies.pop(closest_zombie_index) # 좀비 제거
+            show_message(f"💀 좀비 처치! 골드 +{target_zombie['gold']}, 킬 수 +1")
+        
+    else:
+        show_message("사격할 좀비가 없습니다.")
+    
+    # 턴 진행 없이 바로 UI 업데이트
+    st.rerun()
 
-        // 게임 변수
-        let gameRunning = false;
-        let animationFrameId;
+def reload_action():
+    """
+    총을 재장전하는 액션을 처리합니다.
+    """
+    if not st.session_state.game_running:
+        return
 
-        // 플레이어 설정
-        const player = {
-            x: 0,
-            y: 0,
-            radius: 15,
-            hp: 100,
-            maxHp: 100,
-            baseAtk: 10,
-            color: '#4299e1', // Tailwind blue-500
-            currentMagAmmo: 6,
-            magazineSize: 6,
-            totalAmmo: 30,
-            fireRate: 200, // ms, 샷 간 지연
-            lastShotTime: 0,
-            reloadTime: 1500, // ms
-            isReloading: false,
-            gold: 0,
-            kills: 0
-        };
+    if st.session_state.player_is_reloading:
+        show_message("이미 재장전 중입니다...")
+        return
+    
+    if st.session_state.player_current_mag_ammo == st.session_state.player_magazine_size:
+        show_message("탄창이 이미 가득 찼습니다.")
+        return
+    
+    if st.session_state.player_total_ammo <= 0:
+        show_message("재장전할 탄약이 없습니다.")
+        return
 
-        // 마우스 위치
-        const mouse = {
-            x: 0,
-            y: 0
-        };
+    st.session_state.player_is_reloading = True
+    st.session_state.player_reload_end_time = time.time() + 1.5 # 1.5초 재장전 시간
+    show_message("🔄 재장전 중...")
+    
+    # 실제 탄약 장전은 턴 진행 시 또는 다음 UI 업데이트 시 처리
+    st.rerun()
 
-        // 총알 배열
-        let bullets = [];
-        const bulletSpeed = 10;
-        const bulletRadius = 3;
+def collect_item_action(item_id):
+    """아이템을 획득하는 액션을 처리합니다."""
+    if not st.session_state.game_running:
+        return
 
-        // 좀비 배열
-        let zombies = [];
-        let zombieSpawnTimer = 0;
-        const zombieSpawnInterval = 1000; // ms
-        let zombiesPerWave = 1;
-        let waveCount = 0;
-        const maxWaves = 10; // 최종 보스 전까지 웨이브 수
-        const zombieMaxHp = 30; // 시작 좀비 HP
-        const zombieBaseAtk = 5; // 시작 좀비 공격력
-        const zombieSpeed = 1; // 시작 좀비 속도
+    item_found = None
+    for i, item in enumerate(st.session_state.items):
+        if item['id'] == item_id:
+            item_found = item
+            st.session_state.items.pop(i) # 아이템 제거
+            break
+    
+    if item_found:
+        if item_found['type'] == 'health':
+            heal_amount = ITEM_HEAL_AMOUNT
+            st.session_state.player_hp = min(st.session_state.player_max_hp, st.session_state.player_hp + heal_amount)
+            show_message(f"❤️ 힐팩 획득! HP +{heal_amount}")
+        elif item_found['type'] == 'ammo':
+            ammo_amount = ITEM_AMMO_AMOUNT
+            st.session_state.player_total_ammo += ammo_amount
+            show_message(f"➕ 탄약 박스 획득! 탄약 +{ammo_amount}")
+    else:
+        show_message("선택한 아이템을 찾을 수 없습니다.")
+    
+    st.rerun()
 
-        // 아이템 배열
-        let items = [];
-        const itemSpawnInterval = 5000; // ms
-        let itemSpawnTimer = 0;
-        const itemRadius = 10;
+def next_turn_action():
+    """
+    다음 턴으로 게임을 진행하는 액션을 처리합니다.
+    좀비 생성, 이동, 공격, 재장전 완료 등을 처리합니다.
+    """
+    if not st.session_state.game_running:
+        return
 
-        // 메시지 박스 타이머
-        let messageTimeout;
+    show_message("➡️ 다음 턴으로 진행합니다...")
 
-        // ======================================
-        // 게임 유틸리티 함수
-        // ======================================
+    # 재장전 완료 처리
+    if st.session_state.player_is_reloading:
+        if time.time() >= st.session_state.player_reload_end_time:
+            ammo_to_reload = min(
+                st.session_state.player_magazine_size - st.session_state.player_current_mag_ammo,
+                st.session_state.player_total_ammo
+            )
+            st.session_state.player_current_mag_ammo += ammo_to_reload
+            st.session_state.player_total_ammo -= ammo_to_reload
+            st.session_state.player_is_reloading = False
+            show_message("재장전 완료!")
+        else:
+            show_message("재장전 중...")
+            # 재장전 중에는 턴 진행이 안 되는 대신 다른 액션도 불가 (현재는 UI 버튼 활성화/비활성화로 제어)
 
-        /**
-         * 메시지 박스를 화면에 표시하고 일정 시간 후 사라지게 합니다.
-         * @param {string} msg - 표시할 메시지
-         * @param {number} duration - 메시지가 표시될 시간 (ms)
-         */
-        function showMessage(msg, duration = 1500) {
-            clearTimeout(messageTimeout); // 기존 타이머 클리어
-            messageBox.textContent = msg;
-            messageBox.classList.add('active');
-            messageTimeout = setTimeout(() => {
-                messageBox.classList.remove('active');
-            }, duration);
-        }
-
-        /**
-         * 충돌 감지 (원-원)
-         * @param {object} obj1 - 첫 번째 객체 {x, y, radius}
-         * @param {object} obj2 - 두 번째 객체 {x, y, radius}
-         * @returns {boolean} 충돌 여부
-         */
-        function checkCollision(obj1, obj2) {
-            const dx = obj1.x - obj2.x;
-            const dy = obj1.y - obj2.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            return distance < (obj1.radius + obj2.radius);
-        }
-
-        /**
-         * UI를 업데이트합니다.
-         */
-        function updateUI() {
-            playerHpEl.textContent = `${Math.max(0, player.hp)} / ${player.maxHp}`;
-            playerAmmoEl.textContent = `${player.currentMagAmmo} / ${player.totalAmmo}`;
-            playerGoldEl.textContent = player.gold;
-            playerKillsEl.textContent = player.kills;
-
-            // 재장전 버튼 상태 업데이트
-            if (player.currentMagAmmo === player.magazineSize || player.totalAmmo === 0 || player.isReloading) {
-                reloadButton.disabled = true;
-            } else {
-                reloadButton.disabled = false;
-            }
-        }
-
-        // ======================================
-        // 게임 객체 정의 (생성자)
-        // ======================================
-
-        /**
-         * 총알 객체
-         * @param {number} x - 초기 x 좌표
-         * @param {number} y - 초기 y 좌표
-         * @param {number} angle - 발사 각도
-         * @param {number} damage - 공격력
-         */
-        function Bullet(x, y, angle, damage) {
-            this.x = x;
-            this.y = y;
-            this.radius = bulletRadius;
-            this.vx = Math.cos(angle) * bulletSpeed;
-            this.vy = Math.sin(angle) * bulletSpeed;
-            this.damage = damage;
-            this.color = '#f56565'; // Tailwind red-500
-
-            this.update = function() {
-                this.x += this.vx;
-                this.y += this.vy;
-            };
-
-            this.draw = function() {
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-            };
-        }
-
-        /**
-         * 좀비 객체
-         * @param {number} x - 초기 x 좌표
-         * @param {number} y - 초기 y 좌표
-         * @param {number} hp - 체력
-         * @param {number} atk - 공격력
-         * @param {number} speed - 이동 속도
-         * @param {number} gold - 처치 시 획득 골드
-         * @param {number} id - 고유 ID (Streamlit key 문제 해결을 위한 임시 방편)
-         */
-        let zombieIdCounter = 0; // 좀비 고유 ID 카운터
-        function Zombie(x, y, hp, atk, speed, gold) {
-            this.x = x;
-            this.y = y;
-            this.radius = 20;
-            this.hp = hp;
-            this.maxHp = hp;
-            this.atk = atk;
-            this.speed = speed;
-            this.color = '#4c51bf'; // Tailwind indigo-600
-            this.gold = gold;
-            this.id = zombieIdCounter++; // 고유 ID 부여
-
-            this.update = function() {
-                // 플레이어를 향해 이동
-                const angle = Math.atan2(player.y - this.y, player.x - this.x);
-                this.x += Math.cos(angle) * this.speed;
-                this.y += Math.sin(angle) * this.speed;
-
-                // 플레이어와 충돌 시 공격
-                if (checkCollision(this, player)) {
-                    player.hp -= this.atk;
-                    log(`좀비가 ${this.atk} 피해를 입혔습니다!`);
-                    // 플레이어 체력 음수 방지
-                    if (player.hp <= 0) {
-                        player.hp = 0;
-                        gameOver();
-                    }
-                    // 충돌 후 좀비 위치 약간 밀어내기
-                    const overlap = (this.radius + player.radius) - Math.sqrt(Math.pow(this.x - player.x, 2) + Math.pow(this.y - player.y, 2));
-                    this.x += Math.cos(angle) * -overlap;
-                    this.y += Math.sin(angle) * -overlap;
-                }
-            };
-
-            this.draw = function() {
-                // 좀비 몸통
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-
-                // HP 바
-                const barWidth = this.radius * 2;
-                const barHeight = 5;
-                const hpRatio = this.hp / this.maxHp;
-                ctx.fillStyle = 'gray';
-                ctx.fillRect(this.x - this.radius, this.y - this.radius - barHeight - 2, barWidth, barHeight);
-                ctx.fillStyle = 'lime';
-                ctx.fillRect(this.x - this.radius, this.y - this.radius - barHeight - 2, barWidth * hpRatio, barHeight);
-            };
-        }
-
-        /**
-         * 아이템 객체 (회복 포션, 탄약)
-         * @param {number} x - 초기 x 좌표
-         * @param {number} y - 초기 y 좌표
-         * @param {string} type - 아이템 타입 ('health', 'ammo')
-         */
-        function Item(x, y, type) {
-            this.x = x;
-            this.y = y;
-            this.radius = itemRadius;
-            this.type = type;
-            this.color = type === 'health' ? '#f6e05e' : '#a0aec0'; // Tailwind yellow-400 or gray-400
-
-            this.draw = function() {
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                // 아이템 아이콘 (간단한 텍스트)
-                ctx.fillStyle = '#1a202c';
-                ctx.font = 'bold 12px Inter';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(this.type === 'health' ? '❤️' : '➕', this.x, this.y);
-            };
-        }
-
-        // ======================================
-        // 게임 로직 함수
-        // ======================================
-
-        /**
-         * 캔버스 크기를 화면에 맞게 조정하고 플레이어 위치를 초기화합니다.
-         */
-        function resizeCanvas() {
-            canvas.width = window.innerWidth * 0.8; // 화면 너비의 80%
-            canvas.height = window.innerHeight * 0.7; // 화면 높이의 70%
-
-            // 최소 크기 제한
-            if (canvas.width < 600) canvas.width = 600;
-            if (canvas.height < 400) canvas.height = 400;
-
-            // 플레이어 초기 위치를 캔버스 중앙으로 설정
-            player.x = canvas.width / 2;
-            player.y = canvas.height / 2;
-
-            updateUI(); // UI 업데이트
-        }
-
-        /**
-         * 게임 초기화 함수
-         */
-        function initGame() {
-            // 플레이어 상태 초기화
-            player.hp = player.maxHp;
-            player.currentMagAmmo = player.magazineSize;
-            player.totalAmmo = 30; // 초기 탄약
-            player.gold = 0;
-            player.kills = 0;
-            player.isReloading = false;
-            player.lastShotTime = 0;
-
-            // 게임 요소 초기화
-            bullets = [];
-            zombies = [];
-            items = [];
-            zombieSpawnTimer = 0;
-            itemSpawnTimer = 0;
-            waveCount = 0;
-            zombiesPerWave = 1;
-            zombieIdCounter = 0; // 좀비 ID 카운터 초기화
-
-            // UI 및 화면 초기화
-            showMessage("게임을 시작합니다!", 2000);
-            gameOverScreen.classList.remove('active');
-            gameWinScreen.classList.remove('active');
+    # 좀비 생성
+    st.session_state.last_game_update_time += ZOMBIE_SPAWN_INTERVAL_TURNS * 1000 # 가상의 시간 진행
+    if st.session_state.wave_count < MAX_WAVES:
+        if len(st.session_state.zombies) == 0: # 현재 웨이브 좀비가 없으면 다음 웨이브 시작
+            st.session_state.wave_count += 1
+            st.session_state.zombies_to_spawn_this_wave = st.session_state.wave_count * 2 + 1 # 웨이브별 좀비 수 증가
+            show_message(f"새로운 웨이브 {st.session_state.wave_count} 시작! 좀비 {st.session_state.zombies_to_spawn_this_wave}마리 출현!")
             
-            resizeCanvas(); // 캔버스 크기 조정 및 플레이어 위치 설정
+            for _ in range(st.session_state.zombies_to_spawn_this_wave):
+                spawn_zombie()
+        elif random.random() < 0.5 and len(st.session_state.zombies) < st.session_state.zombies_to_spawn_this_wave:
+            # 웨이브 도중에도 일정 확률로 좀비 추가 스폰
+            spawn_zombie()
 
-            if (!gameRunning) {
-                gameRunning = true;
-                gameLoop(); // 게임 루프 시작
-            }
-        }
+    # 좀비 이동 및 공격
+    for zombie in st.session_state.zombies:
+        zombie['distance'] = max(0, zombie['distance'] - ZOMBIE_SPEED_PER_TURN) # 플레이어에게 가까워짐
 
-        /**
-         * 플레이어 총 발사 로직
-         */
-        function shoot() {
-            const now = Date.now();
-            if (player.currentMagAmmo > 0 && !player.isReloading && (now - player.lastShotTime > player.fireRate)) {
-                // 마우스와 플레이어 사이의 각도 계산
-                const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-                bullets.push(new Bullet(player.x, player.y, angle, player.baseAtk));
-                player.currentMagAmmo--;
-                player.lastShotTime = now;
-                updateUI();
-            } else if (player.currentMagAmmo === 0 && !player.isReloading) {
-                showMessage("탄약이 없습니다! 재장전하세요 (R)", 1000);
-            }
-        }
+        if zombie['distance'] <= 0:
+            damage_taken = zombie['atk']
+            st.session_state.player_hp -= damage_taken
+            show_message(f"💢 좀비에게 {damage_taken} 피해를 입었습니다! (HP: {st.session_state.player_hp})")
+            zombie['distance'] = 1 # 더 이상 다가오지 못하게 잠시 멈춤
 
-        /**
-         * 플레이어 재장전 로직
-         */
-        function reload() {
-            if (player.isReloading || player.currentMagAmmo === player.magazineSize || player.totalAmmo === 0) {
-                return; // 이미 재장전 중이거나, 탄창이 가득 찼거나, 전체 탄약이 없으면 재장전 불가
-            }
+    # 아이템 스폰
+    if random.random() < ITEMS_SPAWN_CHANCE and len(st.session_state.items) < 3: # 최대 3개까지 스폰
+        spawn_item()
 
-            player.isReloading = true;
-            showMessage("재장전 중...", player.reloadTime);
-            reloadButton.disabled = true; // 재장전 중 버튼 비활성화
+    # 게임 종료/승리 조건 체크
+    if st.session_state.player_hp <= 0:
+        st.session_state.player_hp = 0 # 음수 방지
+        st.session_state.game_running = False
+        show_message("☠️ 플레이어가 쓰러졌습니다... 게임 오버!")
+    elif st.session_state.wave_count >= MAX_WAVES and len(st.session_state.zombies) == 0:
+        st.session_state.game_running = False
+        show_message("🎉🎉 게임 클리어! 모든 좀비를 물리쳤습니다!")
 
-            setTimeout(() => {
-                const ammoToReload = Math.min(player.magazineSize - player.currentMagAmmo, player.totalAmmo);
-                player.currentMagAmmo += ammoToReload;
-                player.totalAmmo -= ammoToReload;
-                player.isReloading = false;
-                showMessage("재장전 완료!", 500);
-                updateUI();
-            }, player.reloadTime);
-        }
+    st.rerun()
 
-        /**
-         * 좀비를 생성합니다.
-         */
-        function createZombie() {
-            let x, y;
-            // 화면 가장자리에서 생성
-            const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
-            if (side === 0) { // top
-                x = Math.random() * canvas.width;
-                y = -50;
-            } else if (side === 1) { // right
-                x = canvas.width + 50;
-                y = Math.random() * canvas.height;
-            } else if (side === 2) { // bottom
-                x = Math.random() * canvas.width;
-                y = canvas.height + 50;
-            } else { // left
-                x = -50;
-                y = Math.random() * canvas.height;
-            }
+# =========================
+# 좀비 및 아이템 생성 (내부 함수)
+# =========================
+_zombie_id_counter = 0
+def spawn_zombie():
+    """새로운 좀비를 생성하여 좀비 리스트에 추가합니다."""
+    global _zombie_id_counter
+    # 웨이브 진행에 따라 좀비 능력치 강화
+    hp_boost = st.session_state.wave_count * 10
+    atk_boost = st.session_state.wave_count * 2
+    
+    new_zombie = {
+        'id': _zombie_id_counter,
+        'name': random.choice(["일반 좀비", "빠른 좀비", "강한 좀비"]),
+        'hp': ZOMBIE_INITIAL_HP + hp_boost + random.randint(0, 20),
+        'atk': ZOMBIE_INITIAL_ATK + atk_boost + random.randint(0, 5),
+        'gold': ZOMBIE_INITIAL_GOLD + random.randint(0, 5),
+        'distance': random.randint(5, 15) # 플레이어로부터의 가상 거리
+    }
+    _zombie_id_counter += 1
+    st.session_state.zombies.append(new_zombie)
+    # show_message(f"{new_zombie['name']}가 나타났다! (거리: {new_zombie['distance']})")
 
-            // 웨이브 진행에 따라 좀비 능력치 강화
-            const hpBoost = waveCount * 5;
-            const atkBoost = Math.floor(waveCount / 2);
-            const speedBoost = waveCount * 0.1;
+_item_id_counter = 0
+def spawn_item():
+    """새로운 아이템을 생성하여 아이템 리스트에 추가합니다."""
+    global _item_id_counter
+    item_type = random.choice(['health', 'ammo'])
+    new_item = {
+        'id': _item_id_counter,
+        'type': item_type,
+        'distance': random.randint(3, 10) # 플레이어로부터의 가상 거리
+    }
+    _item_id_counter += 1
+    st.session_state.items.append(new_item)
+    show_message(f"✨ {item_type} 아이템이 나타났다! (거리: {new_item['distance']})")
 
-            zombies.push(new Zombie(
-                x, y,
-                zombieMaxHp + hpBoost,
-                zombieBaseAtk + atkBoost,
-                zombieSpeed + speedBoost,
-                random.randint(5, 15) + Math.floor(waveCount / 3) // 골드 보너스
-            ));
-        }
+# =========================
+# 메인 Streamlit 앱 레이아웃
+# =========================
+st.set_page_config(page_title="Streamlit 좀비 슈터", page_icon="🧟", layout="centered")
 
-        /**
-         * 아이템을 생성합니다.
-         */
-        function createItem() {
-            const x = Math.random() * (canvas.width - itemRadius * 2) + itemRadius;
-            const y = Math.random() * (canvas.height - itemRadius * 2) + itemRadius;
-            const type = random.choice(['health', 'ammo']); // 'health' 또는 'ammo'
-            items.push(new Item(x, y, type));
-        }
+st.title("🧟‍♂️ Streamlit 좀비 슈터 RPG")
+st.write("턴 기반의 간단한 좀비 슈터 게임입니다. 버튼을 클릭하여 좀비로부터 살아남으세요!")
 
-        /**
-         * 게임 오버 처리
-         */
-        function gameOver() {
-            gameRunning = false;
-            cancelAnimationFrame(animationFrameId); // 게임 루프 중지
-            gameOverScreen.classList.add('active'); // 게임 오버 화면 활성화
-            showMessage("게임 오버!", 3000);
-        }
+# 게임 UI 표시
+update_ui()
 
-        /**
-         * 게임 클리어 처리 (예시, 특정 조건 달성 시 호출)
-         */
-        function gameWin() {
-            gameRunning = false;
-            cancelAnimationFrame(animationFrameId);
-            gameWinScreen.classList.add('active');
-            showMessage("게임 클리어!", 3000);
-        }
+# 게임 상태에 따른 버튼 및 메시지
+if st.session_state.game_running:
+    st.markdown("---")
+    st.subheader("액션")
+    col_actions = st.columns(3)
 
-        // ======================================
-        // 메인 게임 루프
-        // ======================================
+    with col_actions[0]:
+        if st.button("🔫 공격", key="shoot_button", disabled=st.session_state.player_is_reloading or len(st.session_state.zombies) == 0):
+            shoot_action()
+    
+    with col_actions[1]:
+        if st.button("🔄 재장전", key="reload_button", disabled=st.session_state.player_is_reloading or st.session_state.player_current_mag_ammo == st.session_state.player_magazine_size or st.session_state.player_total_ammo == 0):
+            reload_action()
+    
+    with col_actions[2]:
+        if st.button("➡️ 턴 진행", key="next_turn_button", disabled=st.session_state.player_is_reloading and (time.time() < st.session_state.player_reload_end_time)):
+            next_turn_action()
 
-        let lastTime = 0;
-        function gameLoop(currentTime) {
-            if (!gameRunning) return;
+    st.markdown("---")
+    st.subheader("맵 상태")
 
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
+    # 플레이어 위치 표시
+    player_col_idx = 4 # 9개 열 중 중앙 (0-8)
+    cols = st.columns(9)
+    with cols[player_col_idx]:
+        st.write("🧍") # 플레이어
 
-            // 업데이트
-            update(deltaTime);
-            // 그리기
-            draw();
+    # 좀비 표시
+    if st.session_state.zombies:
+        st.write("--- 좀비 ---")
+        for zombie in st.session_state.zombies:
+            zombie_icon = "🧟" if "일반" in zombie['name'] else ("🏃" if "빠른" in zombie['name'] else "💪")
+            st.write(f"{zombie_icon} {zombie['name']} (HP: {max(0, zombie['hp'])}) - 거리: {zombie['distance']:.1f}")
+    else:
+        st.write("좀비 없음! 다음 턴을 진행하세요.")
 
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
+    # 아이템 표시
+    if st.session_state.items:
+        st.write("--- 아이템 ---")
+        for item in st.session_state.items:
+            item_icon = "❤️" if item['type'] == 'health' else "➕"
+            if st.button(f"{item_icon} {item['type']} 획득 (거리: {item['distance']:.1f})", key=f"item_collect_{item['id']}"):
+                collect_item_action(item['id'])
+    else:
+        st.write("맵에 아이템이 없습니다.")
 
-        /**
-         * 모든 게임 요소의 상태를 업데이트합니다.
-         * @param {number} deltaTime - 마지막 업데이트 이후 경과 시간 (ms)
-         */
-        function update(deltaTime) {
-            // 좀비 생성 타이머
-            zombieSpawnTimer += deltaTime;
-            if (zombieSpawnTimer >= zombieSpawnInterval && waveCount < maxWaves) {
-                for (let i = 0; i < zombiesPerWave; i++) {
-                    createZombie();
-                }
-                zombieSpawnTimer = 0;
-                // 웨이브 진행에 따라 좀비 생성 수 증가
-                waveCount++;
-                if (waveCount % 2 === 0) { // 2웨이브마다 생성 좀비 수 증가
-                    zombiesPerWave++;
-                }
-                if (waveCount === maxWaves) {
-                    // 마지막 웨이브 후 모든 좀비 처치 시 게임 클리어 고려 (예시)
-                    showMessage("최종 웨이브! 모든 좀비를 처치하세요!", 2000);
-                }
-            }
-            // 모든 좀비 처치 및 최종 웨이브 달성 시 게임 클리어 (예시)
-            if (waveCount === maxWaves && zombies.length === 0) {
-                 gameWin();
-            }
+else: # 게임 종료 (오버 또는 클리어)
+    st.markdown("---")
+    if st.session_state.player_hp <= 0:
+        st.error("게임 오버! 좀비에게 당했습니다...")
+    elif st.session_state.wave_count >= MAX_WAVES and len(st.session_state.zombies) == 0:
+        st.success("🎉 게임 클리어! 모든 웨이브를 막아냈습니다!")
+        st.balloons()
+    
+    if st.button("새 게임 시작", key="restart_game_final"):
+        init_game_state()
+        st.rerun()
 
-
-            // 아이템 생성 타이머
-            itemSpawnTimer += deltaTime;
-            if (itemSpawnTimer >= itemSpawnInterval) {
-                createItem();
-                itemSpawnTimer = 0;
-            }
-
-            // 총알 업데이트 및 경계 검사
-            bullets = bullets.filter(bullet => {
-                bullet.update();
-                // 캔버스 밖으로 나가면 제거
-                return bullet.x > -bullet.radius && bullet.x < canvas.width + bullet.radius &&
-                       bullet.y > -bullet.radius && bullet.y < canvas.height + bullet.radius;
-            });
-
-            // 좀비 업데이트
-            zombies.forEach(zombie => zombie.update());
-
-            // 플레이어 HP 업데이트 (UI)
-            updateUI();
-
-            // 충돌 감지
-            checkCollisions();
-        }
-
-        /**
-         * 모든 게임 요소를 캔버스에 그립니다.
-         */
-        function draw() {
-            // 캔버스 지우기
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // 플레이어 그리기
-            ctx.fillStyle = player.color;
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 플레이어 조준선 (마우스를 향해)
-            const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-            ctx.strokeStyle = '#e2e8f0'; // Tailwind gray-200
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(player.x, player.y);
-            ctx.lineTo(player.x + Math.cos(angle) * player.radius * 2, player.y + Math.sin(angle) * player.radius * 2);
-            ctx.stroke();
-
-            // 총알 그리기
-            bullets.forEach(bullet => bullet.draw());
-
-            // 좀비 그리기
-            zombies.forEach(zombie => zombie.draw());
-
-            // 아이템 그리기
-            items.forEach(item => item.draw());
-        }
-
-        /**
-         * 모든 충돌을 감지하고 처리합니다.
-         */
-        function checkCollisions() {
-            // 총알-좀비 충돌
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                for (let j = zombies.length - 1; j >= 0; j--) {
-                    if (checkCollision(bullets[i], zombies[j])) {
-                        zombies[j].hp -= bullets[i].damage;
-                        bullets.splice(i, 1); // 총알 제거
-                        
-                        if (zombies[j].hp <= 0) {
-                            player.gold += zombies[j].gold; // 골드 획득
-                            player.kills++; // 킬 수 증가
-                            log(`${zombies[j].name} 처치! 골드 +${zombies[j].gold}, 킬 수 +1`);
-                            zombies.splice(j, 1); // 좀비 제거
-                        }
-                        break; // 총알이 하나의 좀비에만 명중하도록
-                    }
-                }
-            }
-
-            // 플레이어-아이템 충돌
-            for (let i = items.length - 1; i >= 0; i--) {
-                if (checkCollision(player, items[i])) {
-                    if (items[i].type === 'health') {
-                        const healAmount = 50;
-                        player.hp = Math.min(player.maxHp, player.hp + healAmount);
-                        showMessage(`HP +${healAmount}!`, 1000);
-                    } else if (items[i].type === 'ammo') {
-                        const ammoAmount = 15;
-                        player.totalAmmo = Math.min(999, player.totalAmmo + ammoAmount); // 최대 탄약 제한
-                        showMessage(`탄약 +${ammoAmount}!`, 1000);
-                    }
-                    items.splice(i, 1); // 아이템 제거
-                    updateUI();
-                }
-            }
-        }
-
-        // ======================================
-        // 이벤트 리스너
-        // ======================================
-
-        // 캔버스 크기 변경 시 재조정
-        window.addEventListener('resize', resizeCanvas);
-
-        // 마우스 이동 시 플레이어 조준 업데이트
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            mouse.x = e.clientX - rect.left;
-            mouse.y = e.clientY - rect.top;
-        });
-
-        // 마우스 클릭 시 총 발사
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 0) { // 좌클릭
-                shoot();
-            }
-        });
-
-        // 키보드 입력
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'r' || e.key === 'R') {
-                reload();
-            }
-        });
-
-        // UI 버튼 클릭
-        reloadButton.addEventListener('click', reload);
-        restartGameBtn.addEventListener('click', initGame);
-        restartWinBtn.addEventListener('click', initGame);
-
-        // ======================================
-        // 게임 시작
-        // ======================================
-        window.onload = function() {
-            initGame(); // 페이지 로드 완료 후 게임 초기화 및 시작
-        };
-
-        // --- Streamlit `random.randint` 및 `random.choice` 대체 ---
-        // Canvas 환경에서 Streamlit의 random 함수를 직접 사용할 수 없으므로,
-        // JavaScript의 Math.random을 사용하여 동일한 기능을 구현합니다.
-        
-        // Python random.randint(a, b)와 유사한 기능
-        random.randint = function(min, max) {
-            min = Math.ceil(min);
-            max = Math.floor(max);
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-        };
-
-        // Python random.choice(array)와 유사한 기능
-        random.choice = function(arr) {
-            return arr[Math.floor(Math.random() * arr.length)];
-        };
-
-    </script>
-</body>
-</html>
